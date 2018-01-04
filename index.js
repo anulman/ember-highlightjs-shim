@@ -9,6 +9,7 @@ const map = stew.map;
 
 module.exports = {
   name: 'ember-highlightjs-shim',
+
   included(app, parentAddon) {
     var target = (parentAddon || app);
     this._super.included.apply(this, arguments);
@@ -16,6 +17,12 @@ module.exports = {
     this.importOption(target);
     this.importCss(target);
     this.importJs(target);
+
+    this._enabledExtensions = [];
+
+    if (shouldImportShowdownShim(app, parentAddon)) {
+      this._enabledExtensions.push('showdown');
+    }
   },
 
   importOption(target) {
@@ -34,6 +41,24 @@ module.exports = {
       production: 'vendor/highlightjs/highlight.pack.min.js'
     });
     target.import('vendor/shims/highlight.js');
+  },
+
+  treeForApp(tree) {
+    let extensions = this._enabledExtensions;
+    let thisDir;
+    let extensionsTree;
+
+    if (extensions.length === 0) {
+      return tree;
+    }
+
+    thisDir = path.dirname(module.filename);
+    extensionsTree = new Funnel(path.join(thisDir, 'vendor', 'initializers'), {
+      include: extensions.map((name) => `${name}.js`),
+      destDir: 'initializers'
+    });
+
+    return mergeTrees([extensionsTree, tree]);
   },
 
   treeForVendor(vendorTree) {
@@ -55,6 +80,14 @@ module.exports = {
     trees.push(hlJs);
     return map(mergeTrees(trees), (content) => content);
   },
-
-
 };
+
+function shouldImportShowdownShim(app, parentAddon) {
+  var config = app.project.config(app.env).highlightJS || {};
+  var isShowdownIncluded = [parentAddon, app]
+    .some((target) => target &&
+      Object.keys(target.dependencies()).includes('ember-cli-showdown'));
+
+  return isShowdownIncluded && config.includeShowdown !== false ||
+    config.includeShowdown === true;
+}
